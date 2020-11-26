@@ -1,0 +1,39 @@
+{
+  "name": "taxi-back",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "_moduleAliases": {
+    "@models": "./src/database/models",
+    "@routes": "./src/routes",
+    "@utils": "./src/utils"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/winningarc/taxi-back.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/winningarc/taxi-back/issues"
+  },
+  "homepage": "https://github.com/winningarc/taxi-back#readme",
+  "dependencies": {
+    "@koa/cors": "^3.1.0",
+    "dotenv": "^8.2.0",
+    "jsonwebtoken": "^8.5.1",
+    "koa": "^2.13.0",
+    "koa-body": "^4.2.0",
+    "koa-helmet": "^6.0.0",
+    "koa-logger": "^3.2.1",
+    "koa-router": "^10.0.0",
+    "module-alias": "^2.2.2",
+    "mysql2": "^2.2.5",
+    "nodemon": "^2.0.6",
+    "sequelize": "^6.3.5"
+  }
+}
