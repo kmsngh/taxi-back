@@ -1,43 +1,43 @@
-const { User } = require('@models');
+require('module-alias/register');
+const models = require('@models');
 const { generateToken } = require('@utils/jwt');
 const { hashed, getRandomString } = require('@utils/crypto');
 const { checkAndGetUser } = require('@utils/auth');
 
 exports.register = async (ctx) => {
-  const { name, email, password, key } = ctx.request.body;
-  const res = await User.findOne({
-    where: { email },
-    attributes: ['email', 'password', 'salt'],
+  const { nickname, phone, password } = ctx.request.body;
+  const phoneUser = await models.User.findOne({
+    where: { phone },
+    attributes: ['phone'],
   });
-  ctx.assert(!res, 400, 'The email is already taken.');
+  ctx.assert(!phoneUser, 400, '이미 사용중인 전화번호입니다.');
+  const nicknameUsesr = await models.User.findOne({
+    where: { nickname },
+  });
+  ctx.assert(!nicknameUsesr, 400, '이미 사용중인 닉네임입니다.');
   // Generate random string of length 16
   const salt = getRandomString(16);
   const value = hashed(password, salt);
-  const newUser = await User.create({
-    name,
-    email,
+  const newUser = await models.User.create({
+    nickname,
+    phone,
     salt,
     password: value,
   });
 
-  Course.findOne({ where: { code: 'CS101' } }).then(async (course) => {
-    await newUser.addCourse(course);
-    await newUser.save();
-  });
-
-  ctx.response.body = newUser;
+  ctx.status = 204;
 };
 
 exports.login = async (ctx) => {
-  const { email, password } = ctx.request.body;
-  const res = await User.findOne({
-    where: { email },
-    attributes: { include: ['email', 'password', 'salt'] },
+  const { nickname, password } = ctx.request.body;
+  const user = await models.User.findOne({
+    where: { nickname },
+    attributes: { include: ['password', 'salt'] },
   });
-  ctx.assert(res, 400, 'The account does not exist.');
-  const value = hashed(password, res.salt);
-  ctx.assert(value === res.password, 401, 'The password is incorrect.');
-  const token = await generateToken({ id: res.id });
+  ctx.assert(user, 400, 'The account does not exist.');
+  const value = hashed(password, user.salt);
+  ctx.assert(value === user.password, 401, 'The password is incorrect.');
+  const token = await generateToken({ id: user.id });
   ctx.cookies.set(process.env.ACCESS_TOKEN, token, {
     maxAge: 1000 * 60 * 60 * 24,
     overwrite: true,
@@ -48,12 +48,12 @@ exports.login = async (ctx) => {
 exports.check = async (ctx) => {
   ctx.assert(ctx.request.user, 401, '401: Unauthorized user');
   const { id } = ctx.request.user;
-  const user = await User.findOne({
+  const user = await models.User.findOne({
     where: { id },
-    attributes: { include: ['email', 'password', 'salt'] },
+    attributes: { include: ['phone'] },
   });
   ctx.assert(user, 401, '401: Unauthorized user');
-  ctx.body = { id, name: user.name };
+  ctx.body = user;
 };
 
 exports.logout = async (ctx) => {
@@ -61,25 +61,38 @@ exports.logout = async (ctx) => {
   ctx.status = 204;
 };
 
+exports.other = async (ctx) => {
+  const otherId = ctx.params.userId;
+  const otherUser = await models.User.findOne({
+    where: { id: otherId },
+  });
+
+  ctx.body = otherUser;
+};
+
 exports.passengers = async (ctx) => {
-  const passengers = await User.findAll({ where: { isDriver: false } });
+  const passengers = await models.User.findAll({
+    where: { isDriver: false },
+  });
 
   ctx.body = passengers;
 };
 
 exports.drivers = async (ctx) => {
-  const drivers = await User.findAll({ where: { isDriver: true } });
+  const drivers = await models.User.findAll({ where: { isDriver: true } });
 
   ctx.body = drivers;
 };
 
 exports.arrivesAt = async (ctx) => {
   const user = await checkAndGetUser(ctx);
-  const today = new Date();
+  const now = new Date();
   const { minutes } = ctx.request.body;
-  const arrivesAt = new Date(today.getTime() + minutes * 60000);
+  const arrivesAt = new Date(now.getTime() + minutes * 60000);
 
   user.arrivesAt = arrivesAt;
+  user.waitingSince = null;
+  user.updatedAt = now;
   await user.save();
 
   ctx.body = arrivesAt;
@@ -87,12 +100,37 @@ exports.arrivesAt = async (ctx) => {
 
 exports.waitingSince = async (ctx) => {
   const user = await checkAndGetUser(ctx);
-  const today = new Date();
+  const now = new Date();
 
-  user.waitingSince = today;
+  user.waitingSince = now;
+  user.updatedAt = now;
   await user.save();
 
-  ctx.body = waitingSince;
+  ctx.body = user.waitingSince;
+};
+
+exports.update = async (ctx) => {
+  const user = await checkAndGetUser(ctx);
+
+  if (!user.validWaitingSince) user.waitingSince = null;
+  if (!user.validArrivesAt) user.arrivesAt = null;
+  user.updatedAt = new Date();
+
+  await user.save();
+
+  ctx.status = 204;
+};
+
+exports.cancel = async (ctx) => {
+  const user = await checkAndGetUser(ctx);
+
+  user.updatedAt = new Date();
+  user.waitingSince = null;
+  user.arrivesAt = null;
+
+  await user.save();
+
+  ctx.status = 204;
 };
 
 exports.updateArrivesAt = async (ctx) => {
@@ -100,9 +138,12 @@ exports.updateArrivesAt = async (ctx) => {
 
   const minutes = user.isDriver ? 30 : 10;
 
-  const arrivesAt = new Date(user.arrivesAt + minutes * 60000);
+  const now = new Date();
+
+  const arrivesAt = new Date(now.getTime() + minutes * 60000);
 
   user.arrivesAt = arrivesAt;
+  user.updatedAt = now;
   await user.save();
 
   ctx.body = arrivesAt;
@@ -111,28 +152,52 @@ exports.updateArrivesAt = async (ctx) => {
 exports.updateWaitingSince = async (ctx) => {
   const user = await checkAndGetUser(ctx);
 
-  const minutes = user.isDriver ? 30 : 5;
-
-  const waitingSince = new Date(user.waitingSince + minutes * 60000);
-
-  user.waitingSince = waitingSince;
+  user.updatedAt = new Date();
   await user.save();
 
   ctx.body = waitingSince;
 };
 
-exports.join = async (ctx) => {
+exports.tryJoin = async (ctx) => {
   const user = await checkAndGetUser(ctx);
-  const joinedId = ctx.params.userId;
-  const joinedUser = await User.findOne({ where: { id: joinedId } });
+  const joinId = ctx.params.userId;
+  const joinUser = await models.User.findOne({
+    where: { id: joinId },
+  });
 
+  joinUser.readyToJoinUser = user.id;
+
+  await joinUser.save();
+
+  ctx.status = 204;
+};
+
+exports.acceptJoin = async (ctx) => {
+  const user = await checkAndGetUser(ctx);
+  const joinId = user.readyToJoinUser;
+  const joinUser = await models.User.findOne({
+    where: { id: joinId },
+  });
+
+  joinUser.arrivesAt = null;
+  joinUser.waitingSince = null;
+  joinUser.readyToJoinUser = null;
   user.arrivesAt = null;
   user.waitingSince = null;
-  joinedUser.arrivesAt = null;
-  joinedUser.waitingSince = null;
+  user.readyToJoinUser = null;
 
   await user.save();
-  await joinedUser.save();
+  await joinUser.save();
+
+  ctx.status = 204;
+};
+
+exports.cancelJoin = async (ctx) => {
+  const user = await checkAndGetUser(ctx);
+
+  user.readyToJoinUser = null;
+
+  await user.save();
 
   ctx.status = 204;
 };

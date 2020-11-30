@@ -14,12 +14,14 @@ module.exports = {
         primaryKey: true,
       },
       nickname: Sequelize.STRING,
-      phone: Sequelize.INTEGER,
+      phone: Sequelize.STRING,
       password: Sequelize.STRING,
       salt: Sequelize.STRING,
       isDriver: Sequelize.BOOLEAN,
       arrivesAt: Sequelize.DATE,
       waitingSince: Sequelize.DATE,
+      updatedAt: Sequelize.DATE,
+      readyToJoinUser: Sequelize.UUID,
     });
   },
 

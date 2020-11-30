@@ -19,8 +19,6 @@ const generateToken = async (payload) => {
   return sign;
 };
 
-exports.generateToken = generateToken;
-
 function decodeToken(token) {
   return new Promise((resolve, reject) => {
     jwt.verify(token, jwtSecret, (error, decoded) => {
@@ -50,3 +48,5 @@ module.exports = async (ctx, next) => {
 
   return next();
 };
+
+module.exports.generateToken = generateToken;
