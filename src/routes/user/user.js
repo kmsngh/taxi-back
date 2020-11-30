@@ -5,7 +5,7 @@ const { hashed, getRandomString } = require('@utils/crypto');
 const { checkAndGetUser } = require('@utils/auth');
 
 exports.register = async (ctx) => {
-  const { nickname, phone, password } = ctx.request.body;
+  const { nickname, phone, password, isDriver } = ctx.request.body;
   const phoneUser = await models.User.findOne({
     where: { phone },
     attributes: ['phone'],
@@ -23,6 +23,7 @@ exports.register = async (ctx) => {
     phone,
     salt,
     password: value,
+    isDriver,
   });
 
   ctx.status = 204;
@@ -34,9 +35,13 @@ exports.login = async (ctx) => {
     where: { nickname },
     attributes: { include: ['password', 'salt'] },
   });
-  ctx.assert(user, 400, 'The account does not exist.');
+  ctx.assert(user, 400, '존재하지 않는 계정입니다.');
   const value = hashed(password, user.salt);
-  ctx.assert(value === user.password, 401, 'The password is incorrect.');
+  ctx.assert(
+    value === user.password,
+    401,
+    '비밀번호가 일치하지 않습니다.'
+  );
   const token = await generateToken({ id: user.id });
   ctx.cookies.set(process.env.ACCESS_TOKEN, token, {
     maxAge: 1000 * 60 * 60 * 24,
